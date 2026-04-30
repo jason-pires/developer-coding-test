@@ -1,0 +1,6 @@
+@Core.API_HostAddress = http://localhost:5120
+
+GET {{Core.API_HostAddress}}/news/top/5
+Accept: application/json
+
+###

@@ -1,0 +1,36 @@
+﻿using Application.Interfaces;
+using Domain.DTO;
+using Infrastructure.Interfaces;
+using Microsoft.Extensions.Logging;
+
+namespace Application.Services
+{
+    public class HackerNewsService : IHackerNewsService
+    {
+        private readonly ILogger<HackerNewsService> _logger;
+        private readonly IMapper _mapper;
+        private readonly IHackerNewsRestClient _hnRestClient;
+
+        public HackerNewsService(
+            ILogger<HackerNewsService> logger,
+            IMapper mapper,
+            IHackerNewsRestClient hnRestClient
+            )
+        {
+            _logger = logger;
+            _mapper = mapper;
+            _hnRestClient = hnRestClient;
+        }
+
+        public async Task<List<StoryDetailDTO>> GetNSortedStoryDetailsAsync(int n)
+        {
+            var storiesIDs = await _hnRestClient.GetBestStoriesIdsAsync();
+            var topNStoriesIDs = storiesIDs.Take(n).ToList();
+
+            var storyDetailsTasks = topNStoriesIDs.Select(_hnRestClient.GetStoryDetailByIdAsync);
+            var storyDetails = await Task.WhenAll(storyDetailsTasks);
+
+            return storyDetails.Select(_mapper.Map<StoryDetailDTO>).ToList();
+        }
+    }
+}
