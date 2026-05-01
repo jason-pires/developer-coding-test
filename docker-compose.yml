@@ -1,0 +1,50 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hackernews-api:latest
+    container_name: hackernews-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      OpenTelemetry__ServiceName: hacker-news-api
+      OpenTelemetry__ServiceVersion: 1.0.0
+      OpenTelemetry__OtlpEndpoint: http://jaeger:4317
+      GenericHttpClientOptions__BaseUrl: https://hacker-news.firebaseio.com/v0
+      GenericHttpClientOptions__TimeoutSeconds: "30"
+      HackerNewsOptions__MaxStoriesPerRequest: "50"
+      HackerNewsOptions__MaxConcurrentStoryRequests: "10"
+      HackerNewsOptions__BestStoriesCacheSeconds: "60"
+      HackerNewsOptions__StoryDetailsCacheSeconds: "300"
+    depends_on:
+      jaeger:
+        condition: service_started
+    networks:
+      - hackernews-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/swagger/index.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: hackernews-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    networks:
+      - hackernews-net
+
+networks:
+  hackernews-net:
+    driver: bridge

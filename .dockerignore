@@ -1,0 +1,14 @@
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/*.user
+**/TestResults
+**/StrykerOutput
+.git
+.github
+.idea
+Tests
+*.md
+Dockerfile
+.dockerignore
