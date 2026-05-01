@@ -5,7 +5,7 @@ using Mapster;
 using MapsterMapper;
 using System.Reflection;
 
-namespace API.Mapping
+namespace API.Config
 {
     public static class MappingConfigurations
     {

@@ -25,12 +25,16 @@ namespace Application.Services
 
         public async Task<List<StoryDetailDTO>> GetNSortedStoryDetailsAsync(int n)
         {
+            _logger.LogInformation("Fetching top {N} story IDs from Hacker News", n);
             var storiesIDs = await _hnRestClient.GetBestStoriesIdsAsync();
             var topNStoriesIDs = storiesIDs.Take(n).ToList();
 
+            _logger.LogInformation("Fetching details for top {N} stories", n);
             var storyDetailsTasks = topNStoriesIDs.Select(_hnRestClient.GetStoryDetailByIdAsync);
+            _logger.LogInformation("Waiting for all story details to be fetched");
             var storyDetails = await Task.WhenAll(storyDetailsTasks);
 
+            _logger.LogInformation("All story details have been fetched");
             return storyDetails.Select(_mapper.Map<StoryDetailDTO>).ToList();
         }
     }

@@ -1,5 +1,5 @@
 using API.DI;
-using API.Mapping;
+using API.Config;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +11,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddConfig(builder.Configuration);
 builder.Services.ConfigureMapster();
+builder.Services.AddApiServicesAndResilience(builder.Configuration, builder.Environment);
 builder.Services.AddHttpClient();
 builder.Services.AddMyDependencyInjection();
 
