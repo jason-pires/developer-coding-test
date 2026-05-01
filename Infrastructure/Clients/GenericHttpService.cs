@@ -47,18 +47,24 @@ namespace Infrastructure.Clients
 
                         if (httpResponse.StatusCode == HttpStatusCode.TooManyRequests || (int)httpResponse.StatusCode >= 500)
                         {
+                            var statusCode = httpResponse.StatusCode;
                             httpResponse.Dispose();
-                            throw new HttpRequestException($"Transient HTTP status code {(int)httpResponse.StatusCode} from {requestUri}.");
+                            throw new HttpRequestException($"Transient HTTP status code {(int)statusCode} from {requestUri}.", null, statusCode);
                         }
 
                         return httpResponse;
                     },
                     cancellationToken);
 
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var statusCode = response.StatusCode;
+                    throw new HttpRequestException($"HTTP request to {requestUri} failed with status code {(int)statusCode}.", null, statusCode);
+                }
 
                 await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                return await JsonSerializer.DeserializeAsync<TResponse>(responseStream, SerializerOptions, cancellationToken);
+                return await JsonSerializer.DeserializeAsync<TResponse>(responseStream, SerializerOptions, cancellationToken)
+                    ?? throw new InvalidOperationException($"Response body could not be deserialized for {requestUri}.");
             }
             catch (Exception ex)
             {

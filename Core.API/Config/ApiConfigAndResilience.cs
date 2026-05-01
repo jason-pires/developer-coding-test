@@ -2,11 +2,13 @@ using Asp.Versioning;
 using Common.Config;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Retry;
 using Polly.Timeout;
 using System.IO.Compression;
+using System.Reflection;
 
 namespace API.Config
 {
@@ -52,6 +54,8 @@ namespace API.Config
                 .Configure<RouteOptions>(options => options.LowercaseUrls = true)
                 .Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
 
+            services.AddProblemDetails();
+
             services.AddControllers(options =>
             {
                 options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
@@ -59,6 +63,22 @@ namespace API.Config
 
             services
                 .AddEndpointsApiExplorer()
+                .AddSwaggerGen(options =>
+                {
+                    options.SwaggerDoc("v1", new OpenApiInfo
+                    {
+                        Title = "Hacker News Orchestrator API",
+                        Version = "v1",
+                        Description = ".NET 9 REST API for orchestrating Hacker News stories."
+                    });
+
+                    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+                    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+                    if (File.Exists(xmlPath))
+                    {
+                        options.IncludeXmlComments(xmlPath);
+                    }
+                })
                 .AddCors(options =>
                 {
                     options.AddPolicy("AllowPolicy", builder =>

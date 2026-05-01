@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Application.Interfaces;
 using Common.Config;
 using Domain.DTO;
@@ -11,6 +12,7 @@ namespace Application.Services
     public class HackerNewsService : IHackerNewsService
     {
         private const string BestStoriesCacheKey = "hackernews:beststories";
+        private static readonly ActivitySource ActivitySource = new("HackerNews.Api");
 
         private readonly ILogger<HackerNewsService> _logger;
         private readonly IMapper _mapper;
@@ -34,7 +36,12 @@ namespace Application.Services
 
         public async Task<List<StoryDetailDTO>> GetNSortedStoryDetailsAsync(int n, CancellationToken cancellationToken = default)
         {
+            using var activity = ActivitySource.StartActivity("GetTopStories", ActivityKind.Internal);
+
             var boundedCount = Math.Min(n, _options.MaxStoriesPerRequest);
+            activity?.SetTag("stories.requested_count", n);
+            activity?.SetTag("stories.bounded_count", boundedCount);
+            activity?.SetTag("stories.max_concurrency", _options.MaxConcurrentStoryRequests);
 
             _logger.LogInformation("Fetching top {N} story IDs from Hacker News", boundedCount);
 
@@ -44,7 +51,10 @@ namespace Application.Services
                 TimeSpan.FromSeconds(_options.BestStoriesCacheSeconds),
                 cancellationToken);
 
+            activity?.SetTag("stories.available_count", storyIds.Count);
+
             var selectedStoryIds = storyIds.Take(boundedCount).ToList();
+            activity?.SetTag("stories.selected_count", selectedStoryIds.Count);
 
             _logger.LogInformation(
                 "Fetching details for top {N} stories with concurrency limit {ConcurrencyLimit}",
@@ -63,6 +73,10 @@ namespace Application.Services
                 parallelOptions,
                 async (item, ct) =>
                 {
+                    using var detailActivity = ActivitySource.StartActivity("GetStoryDetail", ActivityKind.Internal);
+                    detailActivity?.SetTag("story.id", item.storyId);
+                    detailActivity?.SetTag("story.cache_key", $"hackernews:story:{item.storyId}");
+
                     storyDetails[item.index] = await _cacheProvider.GetOrCreateAsync(
                         $"hackernews:story:{item.storyId}",
                         cacheToken => _hackerNewsGateway.GetStoryDetailByIdAsync(item.storyId, cacheToken),
@@ -72,10 +86,13 @@ namespace Application.Services
 
             _logger.LogInformation("All story details have been fetched");
 
-            return storyDetails
+            var mappedStories = storyDetails
                 .Where(story => story is not null)
                 .Select(story => _mapper.Map<StoryDetailDTO>(story!))
                 .ToList();
+
+            activity?.SetTag("stories.result_count", mappedStories.Count);
+            return mappedStories;
         }
     }
 }

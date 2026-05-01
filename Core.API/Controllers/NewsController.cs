@@ -1,5 +1,6 @@
 using Application.Interfaces;
 using Common.Config;
+using Domain.DTO;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -18,32 +19,38 @@ namespace API.Controllers
             _options = options.Value;
         }
 
-        [HttpGet("top/{n}")]
+        /// <summary>
+        /// Retorna as N melhores notícias do Hacker News.
+        /// </summary>
+        /// <param name="n">Quantidade de notícias desejada.</param>
+        /// <param name="cancellationToken">Token de cancelamento da requisição.</param>
+        /// <returns>Lista com as melhores notícias ordenadas.</returns>
+        [HttpGet("top/{n:int}")]
+        [ProducesResponseType(typeof(List<StoryDetailDTO>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status499ClientClosedRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
         public async Task<IActionResult> GetTopNNews(int n, CancellationToken cancellationToken)
         {
             if (n <= 0)
             {
-                return BadRequest("N must be a positive integer.");
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid request",
+                    detail: "N must be a positive integer.");
             }
 
             if (n > _options.MaxStoriesPerRequest)
             {
-                return BadRequest($"N must be less than or equal to {_options.MaxStoriesPerRequest}.");
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid request",
+                    detail: $"N must be less than or equal to {_options.MaxStoriesPerRequest}.");
             }
 
-            try
-            {
-                var topNews = await _hackerNewsService.GetNSortedStoryDetailsAsync(n, cancellationToken);
-                return Ok(topNews);
-            }
-            catch (OperationCanceledException)
-            {
-                return StatusCode(StatusCodes.Status499ClientClosedRequest);
-            }
-            catch (Exception)
-            {
-                return StatusCode(500, "An error occurred while fetching the news.");
-            }
+            var topNews = await _hackerNewsService.GetNSortedStoryDetailsAsync(n, cancellationToken);
+            return Ok(topNews);
         }
     }
 }
