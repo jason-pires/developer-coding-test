@@ -1,80 +1,72 @@
-﻿using Application.Interfaces.AssemblyMaker;
 using Asp.Versioning;
-using Infrastructure.Clients;
+using Common.Config;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.Extensions.Options;
 using Polly;
+using Polly.Retry;
+using Polly.Timeout;
 using System.IO.Compression;
-using System.Net;
 
 namespace API.Config
 {
     public static class ApiConfigAndResilience
     {
         public static void AddApiServicesAndResilience(this IServiceCollection services, ConfigurationManager configuration,
-        IWebHostEnvironment environment)
+            IWebHostEnvironment environment)
         {
-            services
-                .AddSingleton<ILoggerFactory, LoggerFactory>()
-                .AddSingleton(typeof(ILogger<>), typeof(Logger<>))
-                .AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+            services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 
-            services.AddResiliencePipeline("resilience", (builder, context) =>
+            services.AddResiliencePipeline(GenericHttpClientOptions.ClientName, (builder, context) =>
             {
+                var httpClientOptions = context.ServiceProvider.GetRequiredService<IOptions<GenericHttpClientOptions>>().Value;
+
                 builder
-                .AddTimeout(TimeSpan.FromSeconds(30))
-                .AddRetry(new()
-                {
-                    MaxRetryAttempts = 3,
-                    ShouldHandle = new PredicateBuilder()
-                        .Handle<InvalidOperationException>()
-                        .Handle<HttpRequestException>()
-                        .Handle<OperationCanceledException>()
-                        .HandleResult(r => ((HttpResponseMessage)r).StatusCode == HttpStatusCode.TooManyRequests || !((HttpResponseMessage)r).IsSuccessStatusCode),
-                    Delay = TimeSpan.FromSeconds(3),
-                    BackoffType = DelayBackoffType.Exponential,
-                    OnRetry = retryArguments =>
+                    .AddTimeout(TimeSpan.FromSeconds(httpClientOptions.TimeoutSeconds))
+                    .AddRetry(new RetryStrategyOptions
                     {
-                        var loggerFactory = context.ServiceProvider.GetRequiredService<ILoggerFactory>();
-                        var logger = loggerFactory.CreateLogger<GenericRestClient>();
+                        MaxRetryAttempts = 3,
+                        ShouldHandle = new PredicateBuilder()
+                            .Handle<HttpRequestException>()
+                            .Handle<TimeoutRejectedException>(),
+                        Delay = TimeSpan.FromSeconds(1),
+                        BackoffType = DelayBackoffType.Exponential,
+                        OnRetry = retryArguments =>
+                        {
+                            var loggerFactory = context.ServiceProvider.GetRequiredService<ILoggerFactory>();
+                            var logger = loggerFactory.CreateLogger("HackerNewsHttpResilience");
 
-                        logger.LogDebug("Trying {tentative} after {duration} seconds by {Exception}",
-                            retryArguments.AttemptNumber, retryArguments.RetryDelay, retryArguments.Outcome.Exception.Message);
+                            logger.LogWarning(
+                                "Retry {Attempt} for Hacker News after {Delay}. Exception: {ExceptionMessage}",
+                                retryArguments.AttemptNumber + 1,
+                                retryArguments.RetryDelay,
+                                retryArguments.Outcome.Exception?.Message);
 
-                        return ValueTask.CompletedTask;
-                    }
-                });
+                            return ValueTask.CompletedTask;
+                        }
+                    });
             });
 
-            // Configure
             services
                 .Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest)
                 .Configure<RouteOptions>(options => options.LowercaseUrls = true)
-                .Configure<ApiBehaviorOptions>(options =>
-                {
-                    options.SuppressModelStateInvalidFilter = true;
-                });
+                .Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
 
             services.AddControllers(options =>
             {
                 options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
             });
 
-            System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             services
                 .AddEndpointsApiExplorer()
                 .AddCors(options =>
                 {
-                    options.AddPolicy("AllowPolicy",
-                        builder =>
-                        {
-                            builder.AllowAnyOrigin()
-                                .AllowAnyMethod()
-                                .AllowAnyHeader();
-                        });
+                    options.AddPolicy("AllowPolicy", builder =>
+                    {
+                        builder.AllowAnyOrigin()
+                            .AllowAnyMethod()
+                            .AllowAnyHeader();
+                    });
                 })
                 .AddResponseCompression(options =>
                 {
@@ -82,8 +74,14 @@ namespace API.Config
                     options.Providers.Add<GzipCompressionProvider>();
                 })
                 .AddMemoryCache()
-                .AddHttpClient()
-                .AddHealthChecks();
+                .AddHttpClient(GenericHttpClientOptions.ClientName, (serviceProvider, client) =>
+                {
+                    var options = serviceProvider.GetRequiredService<IOptions<GenericHttpClientOptions>>().Value;
+                    client.BaseAddress = new Uri(options.BaseUrl);
+                    client.Timeout = Timeout.InfiniteTimeSpan;
+                });
+
+            services.AddHealthChecks();
 
             services.AddApiVersioning(options =>
             {
@@ -96,13 +94,6 @@ namespace API.Config
                     options.GroupNameFormat = "'v'VVV";
                     options.SubstituteApiVersionInUrl = true;
                 });
-
-            // Services
-            services.Scan(scan => scan
-                .FromAssemblyOf<IServiceAssemblyMarker>()
-                .AddClasses(classes => classes.AssignableTo(typeof(IServiceAssemblyMarker)).Where(item => !item.IsAbstract))
-                .AsImplementedInterfaces()
-                .WithTransientLifetime());
         }
     }
 }

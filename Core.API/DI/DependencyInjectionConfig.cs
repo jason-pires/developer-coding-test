@@ -1,4 +1,4 @@
-﻿using Application.Interfaces.AssemblyMaker;
+using Application.Interfaces.AssemblyMaker;
 using Common.Config;
 using Infrastructure.Interfaces.AssemblyMaker;
 
@@ -9,8 +9,10 @@ namespace API.DI
         public static IServiceCollection AddConfig(
              this IServiceCollection services, IConfiguration config)
         {
-            services.Configure<GenericRestClientOptions>(
-                config.GetSection("GenericRestClientOptions"));
+            services.Configure<GenericHttpClientOptions>(
+                config.GetSection("GenericHttpClientOptions"));
+            services.Configure<HackerNewsOptions>(
+                config.GetSection("HackerNewsOptions"));
 
             return services;
         }
@@ -18,16 +20,12 @@ namespace API.DI
         public static IServiceCollection AddMyDependencyInjection(
              this IServiceCollection services)
         {
-            //services.AddTransient<IMobyRestClient, MobyRestClient>();
-
-            // Services
             services.Scan(scan => scan
                 .FromAssemblyOf<IServiceAssemblyMarker>()
                 .AddClasses(classes => classes.AssignableTo(typeof(IServiceAssemblyMarker)).Where(item => !item.IsAbstract))
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
-            //Repositories
             services.Scan(scan => scan
                 .FromAssemblyOf<IInfrastructureAssemblyMarker>()
                 .AddClasses(classes =>

@@ -3,7 +3,7 @@ using Infrastructure.Interfaces.AssemblyMaker;
 
 namespace Infrastructure.Interfaces
 {
-    public interface IHackerNewsRestClient : IHackerNewsGateway, IInfrastructureAssemblyMarker
+    public interface ICacheService : ICacheProvider, IInfrastructureAssemblyMarker
     {
     }
 }

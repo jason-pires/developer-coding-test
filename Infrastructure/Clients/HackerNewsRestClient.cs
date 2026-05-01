@@ -1,4 +1,4 @@
-﻿using Domain.Responses;
+using Domain.Responses;
 using Infrastructure.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -7,35 +7,35 @@ namespace Infrastructure.Clients
     public class HackerNewsRestClient : IHackerNewsRestClient
     {
         private readonly ILogger<HackerNewsRestClient> _logger;
-        private readonly IGenericRestClient _restClient;
+        private readonly IGenericHttpService _httpService;
 
         public HackerNewsRestClient(
             ILogger<HackerNewsRestClient> logger,
-            IGenericRestClient restClient
-            )
+            IGenericHttpService httpService)
         {
             _logger = logger;
-            _restClient = restClient;
+            _httpService = httpService;
         }
 
-        public async Task<BestStoryResponse> GetStoryDetailByIdAsync(int id)
+        public async Task<BestStoryResponse?> GetStoryDetailByIdAsync(int id, CancellationToken cancellationToken = default)
         {
             try
             {
-                return await _restClient.GetAsync<BestStoryResponse>($"/item/{id}.json");
+                return await _httpService.GetAsync<BestStoryResponse>($"/item/{id}.json", cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error in HackerNewsRestClient.GetStoryDetailByIdAsync, Id: {id}");
+                _logger.LogError(ex, "Error in HackerNewsRestClient.GetStoryDetailByIdAsync, Id: {StoryId}", id);
                 throw;
             }
         }
 
-        public async Task<List<int>> GetBestStoriesIdsAsync()
+        public async Task<IReadOnlyList<int>> GetBestStoriesIdsAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                return await _restClient.GetAsync<List<int>>("/beststories.json");
+                return await _httpService.GetAsync<List<int>>("/beststories.json", cancellationToken: cancellationToken)
+                    ?? [];
             }
             catch (Exception ex)
             {
